@@ -60,6 +60,28 @@ runs:
         cp *.xml ${{ github.workspace }}/ut_log
         echo -e "File Path: cd pytorch/third_party/torch-xpu-ops/test/xpu/extended" | tee -a ${{ github.workspace }}/ut_log/reproduce_op_extended.log
         echo -e "Reproduce Command: pytest -sv failed_case" | tee -a ${{ github.workspace }}/ut_log/reproduce_op_extended.log
+    - name: custom test libraries
+      if: ${{ inputs.ut_name == 'op_ut' }}
+      shell: timeout 3600 bash -xe {0}
+      run: |
+        cmake_prefix_path="$(python -c 'import torch; print(torch.utils.cmake_prefix_path)')"
+        for project in custom_backend custom_operator; do
+          test_dir="${{ github.workspace }}/pytorch/test/${project}"
+          build_dir="${test_dir}/build"
+          build_target="${project}"
+          if [[ "${project}" == "custom_operator" ]]; then
+            build_target=custom_ops
+          fi
+          cmake_args=(
+            "-DCMAKE_PREFIX_PATH=${cmake_prefix_path}"
+            "-DCMAKE_MODULE_PATH=${{ github.workspace }}/pytorch/cmake/public"
+            "-DTORCH_ROOT=${{ github.workspace }}/pytorch"
+            "-DUSE_ROCM=OFF"
+            "-DPython_EXECUTABLE=$(which python)"
+          )
+          cmake -S "${test_dir}" -B "${build_dir}" "${cmake_args[@]}"
+          cmake --build "${build_dir}" --target "${build_target}" --parallel 2
+        done
     - name: op_ut
       shell: timeout 72000 bash -xe {0}
       if: ${{ inputs.ut_name == 'op_ut' }}
